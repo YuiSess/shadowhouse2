@@ -122,8 +122,8 @@ body{background:#000;overflow:hidden;cursor:none;}
 .sk-stat{font-family:'Courier Prime';font-size:7px;color:#333;letter-spacing:1px;}
 
 /* GAME */
-#gameContainer{position:fixed;inset:0;display:none;}
-#c3d{display:block;width:100%;height:100%;}
+#gameContainer{position:fixed;inset:0;display:none;;touch-action:none;-webkit-user-select:none;}
+#c3d{display:block;width:100%;height:100%;touch-action:none;-webkit-touch-callout:none;}
 
 /* HUD */
 #hud{position:fixed;inset:0;pointer-events:none;z-index:100;display:none;}
@@ -217,24 +217,9 @@ body{background:#000;overflow:hidden;cursor:none;}
   background:rgba(255,255,255,.3); border:2px solid rgba(255,255,255,.6);
   position:absolute; top:38px; left:38px;
   box-shadow:0 0 12px rgba(255,255,255,.2);
-  transition: none;
+  transition:none; will-change:left,top;
 }
-/* Look joystick (right side) */
-#lookZone {
-  position:absolute; bottom:28px; right:24px;
-  width:120px; height:120px; pointer-events:all;
-}
-#lookBase {
-  width:120px; height:120px; border-radius:50%;
-  background:rgba(255,255,255,.06); border:2px solid rgba(255,255,255,.14);
-  position:absolute; top:0; left:0;
-}
-#lookKnob {
-  width:48px; height:48px; border-radius:50%;
-  background:rgba(180,80,255,.3); border:2px solid rgba(200,100,255,.6);
-  position:absolute; top:36px; left:36px;
-  box-shadow:0 0 10px rgba(200,100,255,.3);
-}
+/* look joystick removed — free drag on right half */
 /* Action buttons */
 .mBtn {
   position:absolute; border-radius:50%; pointer-events:all;
@@ -465,6 +450,7 @@ body{background:#000;overflow:hidden;cursor:none;}
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
+const IS_MOBILE=('ontouchstart' in window)||(navigator.maxTouchPoints>0);
 let curX=window.innerWidth/2,curY=window.innerHeight/2;
 document.addEventListener('mousemove',e=>{
   const c=$('cur');
@@ -1062,7 +1048,11 @@ function initGame(opts){
   $('stunBar').className='';
   buildScene3D();bindInput();window._G=G;
   updInvUI();updPzUI();
-  $('gameContainer').onclick=()=>{if(!pointerLocked&&!G.currentPuzzle&&$('goScreen').className!=='on'&&$('pauseScreen').className!=='on')$('gameContainer').requestPointerLock();};
+  $('gameContainer').onclick=()=>{
+  if(IS_MOBILE)return; // mobile uses touch drag, no pointer lock needed
+  if(!pointerLocked&&!G.currentPuzzle&&$('goScreen').className!=='on'&&$('pauseScreen').className!=='on')
+    $('gameContainer').requestPointerLock();
+};
   addNotif(`Personagem: ${sk.name} · ${sk.tag}`);
   addNotif('🔦 F=Lanterna · Segure CLICK perto de Kauan=Atordoar!');
   loop3d();
@@ -1116,11 +1106,14 @@ let SC,CAM,RND;
 function buildScene3D(){
   const cv=$('c3d');cv.width=window.innerWidth;cv.height=window.innerHeight;
   RND=new THREE.WebGLRenderer({canvas:cv,antialias:false});
-  RND.setSize(window.innerWidth,window.innerHeight);RND.setPixelRatio(Math.min(window.devicePixelRatio,1.5));
-  RND.shadowMap.enabled=true;RND.shadowMap.type=THREE.PCFSoftShadowMap;
+  RND.setSize(window.innerWidth,window.innerHeight);
+// IS_MOBILE used instead of isMob
+RND.setPixelRatio(Math.min(window.devicePixelRatio, IS_MOBILE?1.0:1.5));
+  RND.shadowMap.enabled=!IS_MOBILE; // shadows off on mobile for performance
+RND.shadowMap.type=THREE.PCFSoftShadowMap;
   RND.outputEncoding=THREE.sRGBEncoding;RND.toneMapping=THREE.ReinhardToneMapping;
   RND.toneMappingExposure=.42;RND.setClearColor(0x000000);
-  SC=new THREE.Scene();SC.fog=new THREE.FogExp2(0x060508,.055);
+  SC=new THREE.Scene();SC.fog=new THREE.FogExp2(0x060508,IS_MOBILE?.07:.055);
   CAM=new THREE.PerspectiveCamera(82,window.innerWidth/window.innerHeight,.05,120);
   CAM.position.set(G.px,G.py,G.pz);
   SC.add(new THREE.AmbientLight(0x0c0a14,.9));
@@ -1584,74 +1577,126 @@ function buildCityNPCs(){
 const MOB = { mx:0, mz:0, lx:0, ly:0 }; // move x/z, look x/y deltas
 
 function initMobile(){
-  // Only show on touch devices
-  const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints>0);
-  if(!isMobile) return;
-  const mHUD = $('mobileHUD');
-  mHUD.style.display = 'block';
+  const isMobile=('ontouchstart' in window)||(navigator.maxTouchPoints>0);
+  if(!IS_MOBILEile)return;
 
-  function makeJoy(zoneId, knobId, radius, onMove, onEnd){
-    const zone = $(zoneId), knob = $(knobId);
-    const R = radius; // max knob travel px
-    let id = null, ox=0, oy=0;
-    const rect = ()=> zone.getBoundingClientRect();
-    zone.addEventListener('touchstart', e=>{
-      e.preventDefault();
-      const t = e.changedTouches[0];
-      id = t.identifier;
-      const r = rect();
-      ox = r.left + r.width/2;
-      oy = r.top + r.height/2;
-    },{passive:false});
-    document.addEventListener('touchmove', e=>{
-      if(id===null) return;
-      for(const t of e.changedTouches){
-        if(t.identifier!==id) continue;
-        const dx = t.clientX - ox, dy = t.clientY - oy;
-        const dist = Math.min(Math.sqrt(dx*dx+dy*dy), R);
-        const angle = Math.atan2(dy, dx);
-        const kx = Math.cos(angle)*dist, ky = Math.sin(angle)*dist;
-        knob.style.left = (R - 27 + kx) + 'px';
-        knob.style.top  = (R - 27 + ky) + 'px';
-        onMove(kx/R, ky/R);
+  // Show HUD
+  $('mobileHUD').style.display='block';
+
+  // Hide look hint after first touch
+  const hint=$('mobileLookHint');
+  let hintShown=true;
+
+  // ── MOVEMENT JOYSTICK (left side) ──────────────────────────
+  const jZone=$('joystickZone'), jKnob=$('joystickKnob');
+  const jBase=$('joystickBase');
+  const jR=52; // travel radius px
+  let jId=null, jOx=0, jOy=0;
+
+  jZone.addEventListener('touchstart', e=>{
+    e.preventDefault();
+    const t=e.changedTouches[0];
+    jId=t.identifier;
+    const r=jBase.getBoundingClientRect();
+    jOx=r.left+r.width/2; jOy=r.top+r.height/2;
+  },{passive:false});
+
+  // ── FREE-LOOK TOUCH (right half of screen) ─────────────────
+  // Any touch on right 55% of screen = drag to look (true FPS feel)
+  let lId=null, lPx=0, lPy=0;
+  const LOOK_SENS_X=0.007;  // yaw sensitivity
+  const LOOK_SENS_Y=0.005;  // pitch sensitivity
+
+  // ── UNIFIED TOUCH TRACKING ──────────────────────────────────
+  document.addEventListener('touchstart', e=>{
+    // Hide hint
+    if(hintShown&&hint){hint.style.display='none';hintShown=false;}
+
+    for(const t of e.changedTouches){
+      const isLeftSide = t.clientX < window.innerWidth * 0.45;
+      // If no joystick touch yet AND left side → joystick
+      if(isLeftSide && jId===null){
+        jId=t.identifier;
+        const r=jBase.getBoundingClientRect();
+        jOx=r.left+r.width/2; jOy=r.top+r.height/2;
       }
-    },{passive:true});
-    document.addEventListener('touchend', e=>{
-      for(const t of e.changedTouches){
-        if(t.identifier!==id) continue;
-        id=null;
-        // Reset knob to visual center of base
-        const bRect=zone.getBoundingClientRect();
-        const kw=knob.offsetWidth||54;
-        const center=(bRect.width-kw)/2;
-        knob.style.left=center+'px'; knob.style.top=center+'px';
-        onEnd();
+      // If right side AND no active look touch AND not a button → free look
+      else if(!isLeftSide && lId===null){
+        // Make sure it's not hitting a button
+        const el=document.elementFromPoint(t.clientX,t.clientY);
+        if(el&&el.classList.contains('mBtn'))continue;
+        lId=t.identifier;
+        lPx=t.clientX; lPy=t.clientY;
       }
-    },{passive:true});
+    }
+  },{passive:true});
+
+  document.addEventListener('touchmove', e=>{
+    e.preventDefault(); // prevent scroll freeze
+    for(const t of e.changedTouches){
+      // ── Movement joystick ──
+      if(t.identifier===jId){
+        const dx=t.clientX-jOx, dy=t.clientY-jOy;
+        const dist=Math.min(Math.sqrt(dx*dx+dy*dy),jR);
+        const angle=Math.atan2(dy,dx);
+        const kx=Math.cos(angle)*dist, ky=Math.sin(angle)*dist;
+        // Update knob visual — offset from center (65-27=38px is center)
+        jKnob.style.left=(38+kx)+'px';
+        jKnob.style.top =(38+ky)+'px';
+        MOB.mx=kx/jR; MOB.mz=ky/jR;
+      }
+      // ── Free look ──
+      if(t.identifier===lId){
+        const dx=t.clientX-lPx;
+        const dy=t.clientY-lPy;
+        // Apply directly to yaw/pitch — smooth FPS feel
+        G.yaw  -= dx * LOOK_SENS_X;
+        G.pitch -= dy * LOOK_SENS_Y;
+        G.pitch  = Math.max(-1.1, Math.min(1.1, G.pitch));
+        lPx=t.clientX; lPy=t.clientY;
+        // Zero out MOB look since we update G directly
+        MOB.lx=0; MOB.ly=0;
+      }
+    }
+  },{passive:false});
+
+  document.addEventListener('touchend', e=>{
+    for(const t of e.changedTouches){
+      if(t.identifier===jId){
+        jId=null;
+        jKnob.style.left='38px'; jKnob.style.top='38px';
+        MOB.mx=0; MOB.mz=0;
+      }
+      if(t.identifier===lId){
+        lId=null;
+      }
+    }
+  },{passive:true});
+
+  document.addEventListener('touchcancel', e=>{
+    for(const t of e.changedTouches){
+      if(t.identifier===jId){jId=null;jKnob.style.left='38px';jKnob.style.top='38px';MOB.mx=0;MOB.mz=0;}
+      if(t.identifier===lId){lId=null;}
+    }
+  },{passive:true});
+
+  // ── ACTION BUTTONS ──────────────────────────────────────────
+  function addBtn(id, onDown, onUp){
+    const el=$(id); if(!el)return;
+    el.addEventListener('touchstart', e=>{e.preventDefault();e.stopPropagation();if(onDown)onDown();},{passive:false});
+    if(onUp) el.addEventListener('touchend', e=>{e.preventDefault();if(onUp)onUp();},{passive:false});
   }
+  addBtn('btnF',   ()=>toggleFL());
+  addBtn('btnE',   ()=>tryInteract());
+  addBtn('btnQ',   ()=>tryHide());
+  addBtn('btnRun', ()=>{ K['ShiftLeft']=true; }, ()=>{ K['ShiftLeft']=false; });
+  addBtn('btnStair',()=>checkStaircase());
 
-  // Movement joystick
-  makeJoy('joystickZone','joystickKnob', 52,
-    (x,y)=>{ MOB.mx=x; MOB.mz=y; },
-    ()=>  { MOB.mx=0; MOB.mz=0; }
-  );
-
-  // Look joystick
-  makeJoy('lookZone','lookKnob', 48,
-    (x,y)=>{ MOB.lx=x*.05; MOB.ly=y*.03; },
-    ()=>  { MOB.lx=0; MOB.ly=0; }
-  );
-
-  // Action buttons
-  $('btnF').addEventListener('touchstart', e=>{e.preventDefault();toggleFL();},{passive:false});
-  $('btnE').addEventListener('touchstart', e=>{e.preventDefault();tryInteract();},{passive:false});
-  $('btnQ').addEventListener('touchstart', e=>{e.preventDefault();tryHide();},{passive:false});
-  $('btnRun').addEventListener('touchstart', e=>{e.preventDefault();K['ShiftLeft']=true;},{passive:false});
-  $('btnRun').addEventListener('touchend',  e=>{e.preventDefault();K['ShiftLeft']=false;},{passive:false});
-  $('btnStair').addEventListener('touchstart', e=>{e.preventDefault();checkStaircase();},{passive:false});
-
-  // Also disable context menu on long press
+  // Disable browser context menu on long press
   document.addEventListener('contextmenu', e=>e.preventDefault());
+
+  // ── PERFORMANCE: reduce pixel ratio on mobile ───────────────
+  if(RND) RND.setPixelRatio(Math.min(window.devicePixelRatio, 1.0));
 }
 
 function updMobileStairBtn(){
@@ -1713,8 +1758,7 @@ function updPlayer(dt){
     dx-=Math.sin(G.yaw)*MOB.mz*spd + Math.cos(G.yaw)*MOB.mx*spd;
     dz-=Math.cos(G.yaw)*MOB.mz*spd - Math.sin(G.yaw)*MOB.mx*spd;
   }
-  // Mobile look joystick
-  if(MOB.lx!==0||MOB.ly!==0){G.yaw-=MOB.lx;G.pitch=Math.max(-1.1,Math.min(1.1,G.pitch-MOB.ly));}
+  // Mobile look: applied directly in touchmove handler (FPS drag)
   updMobileStairBtn();
   const mv=dx||dz;
   const nr=Math.floor((G.pz+dz)/CELL),nc=Math.floor((G.px+dx)/CELL);
@@ -2297,7 +2341,7 @@ function loop3d(ts=0){
   G.items.forEach(it=>{if(!it.collected&&it.mesh){try{it.mesh.position.y=floorY(it.floor||0)+.2+Math.sin(G.frame*.06+it.r)*.05;}catch(e){it.mesh=null;}}});
   if(G.monster&&G.monster.mesh&&G.monster.visible){const M=G.monster;const fy=Math.atan2(G.px-M.x,G.pz-M.z);if(M.eyeL)M.eyeL.rotation.y=fy-M.mesh.rotation.y;if(M.eyeR)M.eyeR.rotation.y=fy-M.mesh.rotation.y;}
   try{RND.render(SC,CAM);}catch(e){}
-  renderMM();if(G.frame%3===0)renderNoise();
+  if(!IS_MOBILE||G.frame%2===0)renderMM();if(G.frame%3===0)if(!IS_MOBILE)renderNoise();
 }
 
 // ── PLATFORM & WELCOME ──────────────────────────────────────────
@@ -2571,7 +2615,7 @@ function mpOnGameStart() {
     if (mpSendTimer >= MP_SEND_RATE) { mpSendTimer = 0; if (mpActive) mpSendPos(); }
     try { RND.render(SC, CAM); } catch (e) {}
     renderMM();
-    if (G.frame % 3 === 0) renderNoise();
+    if (G.frame % 3 === 0) if(!IS_MOBILE)renderNoise();
   }
   animId = requestAnimationFrame(mpLoop);
 }
@@ -3406,11 +3450,8 @@ initNoise();
     <div id="joystickBase"></div>
     <div id="joystickKnob"></div>
   </div>
-  <!-- Right: look joystick -->
-  <div id="lookZone">
-    <div id="lookBase"></div>
-    <div id="lookKnob"></div>
-  </div>
+  <!-- Look: handled by free-drag on right half of screen -->
+  <div id="mobileLookHint">👆 ARRASTE PARA OLHAR</div>
   <!-- Action buttons -->
   <div class="mBtn" id="btnF" title="Lanterna">🔦</div>
   <div class="mBtn" id="btnE" title="Interagir">⚡</div>
